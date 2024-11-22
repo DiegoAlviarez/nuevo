@@ -1,13 +1,15 @@
 import streamlit as st
 from streamlit_lottie import st_lottie
 from data_loader import load_data
-from utils import load_lottieurl, convertir_urls_a_imagenes
+from utils import load_lottieurl, convertir_urls_a_imagenes, generar_valores_mensuales
 from visualizations import (
     plot_evolucion_individual,
     plot_comparacion_jugadores,
     plot_tendencias_generales,
     plot_distribucion_valores
 )
+from components.league_comparison import show_league_comparison
+from components.league_evolution import plot_league_evolution_comparison, plot_league_comparison_stats
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -33,46 +35,42 @@ if menu_principal == "Introducción":
     donde el valor de los jugadores es un indicador crucial de su desempeño y potencial.
     """)
     
-    liga_seleccionada = st.selectbox(
-        "Seleccione la liga a analizar:",
-        ["LaLiga", "Bundesliga"]
-    )
-    
-    datos_mostrar = data if liga_seleccionada == "LaLiga" else data_bundesliga
+    # Mostrar comparativa de ligas
+    show_league_comparison(data, data_bundesliga)
     
     lottie_url = "https://lottie.host/embed/3d48d4b9-51ad-4b7d-9d28-5e248cace11/Rz3QtSCq3.json"
     lottie_coding = load_lottieurl(lottie_url)
     if lottie_coding:
         st_lottie(lottie_coding, height=200, width=300)
-    
-    datos_con_imagenes = convertir_urls_a_imagenes(datos_mostrar)
-    st.subheader(f"Datos de Jugadores - {liga_seleccionada}")
-    st.markdown(datos_con_imagenes.to_html(escape=False), unsafe_allow_html=True)
 
 elif menu_principal == "Metodología":
     st.title("Metodología")
     
-    liga_seleccionada = st.selectbox(
-        "Seleccione la liga a analizar:",
-        ["LaLiga", "Bundesliga"]
-    )
-    
     visualizacion = st.selectbox(
         "Seleccione tipo de visualización:",
-        ["Evolución Individual", "Comparación entre Jugadores", "Tendencias Generales"]
+        ["Evolución Individual", "Comparación entre Jugadores", "Tendencias Generales", "Comparativa entre Ligas"]
     )
     
-    datos_analizar = data if liga_seleccionada == "LaLiga" else data_bundesliga
     col_inicial = "Valor de Mercado en 01/01/2024"
     col_final = "Valor de Mercado Actual"
     
     if visualizacion == "Evolución Individual":
+        liga_seleccionada = st.selectbox(
+            "Seleccione la liga a analizar:",
+            ["LaLiga", "Bundesliga"]
+        )
+        datos_analizar = data if liga_seleccionada == "LaLiga" else data_bundesliga
         st.subheader(f"Evolución Individual del Valor de Mercado - {liga_seleccionada}")
         nombre_jugador = st.selectbox("Selecciona un jugador:", datos_analizar['Nombre'].unique())
         plot_evolucion_individual(datos_analizar, nombre_jugador, col_inicial, col_final)
     
     elif visualizacion == "Comparación entre Jugadores":
         st.subheader("Comparación entre Jugadores")
+        liga_seleccionada = st.selectbox(
+            "Seleccione la liga a analizar:",
+            ["LaLiga", "Bundesliga"]
+        )
+        datos_analizar = data if liga_seleccionada == "LaLiga" else data_bundesliga
         col1, col2 = st.columns(2)
         with col1:
             jugador1 = st.selectbox("Primer jugador:", datos_analizar['Nombre'].unique())
@@ -81,8 +79,20 @@ elif menu_principal == "Metodología":
         plot_comparacion_jugadores(datos_analizar, jugador1, jugador2, col_inicial, col_final)
     
     elif visualizacion == "Tendencias Generales":
+        liga_seleccionada = st.selectbox(
+            "Seleccione la liga a analizar:",
+            ["LaLiga", "Bundesliga"]
+        )
+        datos_analizar = data if liga_seleccionada == "LaLiga" else data_bundesliga
         st.subheader("Tendencias Generales del Mercado")
         plot_tendencias_generales(datos_analizar, col_inicial, col_final)
+    
+    elif visualizacion == "Comparativa entre Ligas":
+        st.subheader("Análisis Comparativo entre LaLiga y Bundesliga")
+        plot_league_evolution_comparison(data, data_bundesliga, col_inicial, col_final)
+        plot_league_comparison_stats(data, data_bundesliga)
+
+# ... (rest of the sections remain the same)
 
 elif menu_principal == "Objetivos":
     st.title("Objetivos del Proyecto")
@@ -121,32 +131,35 @@ elif menu_principal == "Resultados":
     
     liga_seleccionada = st.selectbox(
         "Seleccione la liga a analizar:",
-        ["LaLiga", "Bundesliga"]
+        ["LaLiga", "Bundesliga", "Comparativa"]
     )
     
-    datos_analizar = data if liga_seleccionada == "LaLiga" else data_bundesliga
-    col_inicial = "Valor de Mercado en 01/01/2024"
-    col_final = "Valor de Mercado Actual"
-    
-    tab1, tab2, tab3 = st.tabs(["Estadísticas Generales", "Análisis de Tendencias", "Recomendaciones"])
-    
-    with tab1:
-        st.header("Estadísticas Generales")
-        st.write("Estadísticas descriptivas de los valores de mercado:")
-        st.dataframe(datos_analizar[[col_inicial, col_final]].describe())
+    if liga_seleccionada == "Comparativa":
+        show_league_comparison(data, data_bundesliga)
+    else:
+        datos_analizar = data if liga_seleccionada == "LaLiga" else data_bundesliga
+        col_inicial = "Valor de Mercado en 01/01/2024"
+        col_final = "Valor de Mercado Actual"
         
-    with tab2:
-        st.header("Análisis de Tendencias")
-        plot_distribucion_valores(datos_analizar, col_inicial, col_final)
+        tab1, tab2, tab3 = st.tabs(["Estadísticas Generales", "Análisis de Tendencias", "Recomendaciones"])
         
-    with tab3:
-        st.header("Recomendaciones")
-        st.write("""
-        Basadas en el análisis de datos:
-        - Recomendaciones para clubes
-        - Estrategias de inversión
-        - Oportunidades de mercado
-        """)
+        with tab1:
+            st.header("Estadísticas Generales")
+            st.write("Estadísticas descriptivas de los valores de mercado:")
+            st.dataframe(datos_analizar[[col_inicial, col_final]].describe())
+            
+        with tab2:
+            st.header("Análisis de Tendencias")
+            plot_distribucion_valores(datos_analizar, col_inicial, col_final)
+            
+        with tab3:
+            st.header("Recomendaciones")
+            st.write("""
+            Basadas en el análisis de datos:
+            - Recomendaciones para clubes
+            - Estrategias de inversión
+            - Oportunidades de mercado
+            """)
 
 else:  # Conclusiones
     st.title("Conclusiones")
