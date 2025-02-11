@@ -30,7 +30,7 @@ if 'chat_history' not in st.session_state:
 if 'vault_key' not in st.session_state:
     st.session_state.vault_key = None
 
-# Configuración de la página con fondo personalizado
+# Configuración de la página
 st.set_page_config(
     page_title="WildPass Pro",
     page_icon="🔒",
@@ -38,63 +38,144 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS con imagen de fondo
+# Animaciones y efectos dinámicos
 st.markdown(f"""
 <style>
+@keyframes gradient {{
+    0% {{background-position: 0% 50%;}}
+    50% {{background-position: 100% 50%;}}
+    100% {{background-position: 0% 50%;}}
+}}
+
+@keyframes float {{
+    0% {{transform: translateY(0px);}}
+    50% {{transform: translateY(-20px);}}
+    100% {{transform: translateY(0px);}}
+}}
+
 .stApp {{
-    background-image: url("https://media.istockphoto.com/id/1224500457/es/vector/patr%C3%B3n-sin-fisuras-de-l%C3%ADneas-de-tecnolog%C3%ADa-abstracta.jpg?s=612x612&w=0&k=20&c=5A3m7nH7jKvLh5O0-4y-4p7X4Y8l0w0J3Q8W7J3Q3Y=");
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
+    background: linear-gradient(-45deg, #1a1a1a, #2a2a2a, #3a3a3a, #4a4a4a);
+    background-size: 400% 400%;
+    animation: gradient 15s ease infinite;
+    color: white;
 }}
 
 .main {{
-    background-color: rgba(255, 255, 255, 0.9);
+    background-color: rgba(0, 0, 0, 0.8) !important;
     padding: 30px;
     border-radius: 15px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.2);
+    box-shadow: 0 0 30px rgba(255,255,255,0.1);
+    backdrop-filter: blur(10px);
+    animation: slideIn 1s ease-out;
+}}
+
+@keyframes slideIn {{
+    from {{transform: translateY(50px); opacity: 0;}}
+    to {{transform: translateY(0); opacity: 1;}}
+}}
+
+h1, h2, h3 {{
+    color: #00ff9d !important;
+    text-shadow: 0 0 10px rgba(0,255,157,0.5);
+}}
+
+.stButton>button {{
+    background: linear-gradient(45deg, #00ff9d, #00b8ff);
+    border: none;
+    color: black !important;
+    border-radius: 25px;
+    transition: all 0.3s ease;
+    animation: float 3s ease-in-out infinite;
+}}
+
+.stButton>button:hover {{
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(0,255,157,0.5);
 }}
 
 .chat-container {{
     max-height: 500px;
     overflow-y: auto;
     padding: 20px;
-    background: rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.6);
     border-radius: 15px;
     margin-bottom: 20px;
+    border: 1px solid #00ff9d;
 }}
 
 .user-message {{
-    background: #DCF8C6;
+    background: rgba(0, 255, 157, 0.1);
     padding: 10px;
     border-radius: 15px;
-    margin: 5px 0;
+    margin: 10px 0;
     max-width: 70%;
     float: right;
     clear: both;
+    border: 1px solid #00ff9d;
+    animation: messageIn 0.5s ease-out;
 }}
 
 .bot-message {{
-    background: white;
+    background: rgba(0, 184, 255, 0.1);
     padding: 10px;
     border-radius: 15px;
-    margin: 5px 0;
+    margin: 10px 0;
     max-width: 70%;
     float: left;
     clear: both;
+    border: 1px solid #00b8ff;
+    animation: messageIn 0.5s ease-out;
 }}
 
-.timestamp {{
-    font-size: 0.7em;
-    color: #666;
-    margin-top: 3px;
+@keyframes messageIn {{
+    from {{transform: translateX(100px); opacity: 0;}}
+    to {{transform: translateX(0); opacity: 1;}}
 }}
 
 .sidebar .sidebar-content {{
-    background-color: rgba(255, 255, 255, 0.9) !important;
+    background-color: rgba(0, 0, 0, 0.8) !important;
+    backdrop-filter: blur(5px);
+    border-right: 1px solid #00ff9d;
+}}
+
+#particles {{
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
 }}
 </style>
+
+<div id="particles"></div>
+
+<script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+<script>
+particlesJS('particles', {{
+  "particles": {{
+    "number": {{ "value": 80 }},
+    "color": {{ "value": "#00ff9d" }},
+    "shape": {{ "type": "circle" }},
+    "opacity": {{ "value": 0.5 }},
+    "size": {{ "value": 3 }},
+    "move": {{
+      "enable": true,
+      "speed": 2,
+      "direction": "none",
+      "random": false,
+      "straight": false,
+      "out_mode": "out",
+      "bounce": false
+    }}
+  }},
+  "interactivity": {{
+    "events": {{
+      "onhover": {{ "enable": true, "mode": "repulse" }}
+    }}
+  }}
+}});
+</script>
 """, unsafe_allow_html=True)
 
 class SecureVault:
@@ -450,8 +531,6 @@ def main():
         secure_folder_section()
     
     st.markdown('</div>', unsafe_allow_html=True)
-
-# ... (todo el código anterior)
 
 if __name__ == "__main__":
     main()
