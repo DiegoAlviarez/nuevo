@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 from google.generativeai import configure, Chat
 
 # Configurar Gemini 2.0 (debes agregar tu API key de Gemini)
-GEMINI_API_KEY = "tu_api_key"
+GEMINI_API_KEY = "AIzaSyDYz170jq43MyNw8W14GPYb25ZdcNafSnE"
 configure(api_key=GEMINI_API_KEY)
 chatbot = Chat()
 
