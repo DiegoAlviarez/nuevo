@@ -8,7 +8,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from google.generativeai import configure, generate_content
 
-configure(api_key="TU_API_KEY_GEMINI")
+configure(api_key="AIzaSyDYz170jq43MyNw8W14GPYb25ZdcNafSnE")
 
 class PasswordModel:
     def __init__(self):
