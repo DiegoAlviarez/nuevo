@@ -7,12 +7,31 @@ import time
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from google.generativeai import configure, Chat
 
-# Configurar Gemini 2.0 (debes agregar tu API key de Gemini)
-GEMINI_API_KEY = "AIzaSyDYz170jq43MyNw8W14GPYb25ZdcNafSnE"
-configure(api_key=GEMINI_API_KEY)
-chatbot = Chat()
+# Intentamos importar Gemini 2.0 (si falla, se manejará el error)
+try:
+    from google.generativeai import configure, Chat
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    st.warning("Google Gemini 2.0 no está disponible. Usaremos OpenAI como alternativa.")
+
+# Configuración de la API de Gemini (si disponible)
+if GEMINI_AVAILABLE:
+    GEMINI_API_KEY = "AIzaSyDYz170jq43MyNw8W14GPYb25ZdcNafSnE"
+    configure(api_key=GEMINI_API_KEY)
+    chatbot = Chat()
+else:
+    import openai
+    openai.api_key = "your_openai_api_key"
+    
+    def chatbot_response(message):
+        response = openai.Completion.create(
+            engine="gpt-3.5-turbo",
+            prompt=message,
+            max_tokens=150
+        )
+        return response.choices[0].text.strip()
 
 class PasswordModel:
     def __init__(self):
@@ -149,9 +168,14 @@ def main():
         
         if st.button("Enviar"):
             if chat_input:
-                with st.spinner("Pensando..."):
-                    response = chatbot.send_message(chat_input)
-                    st.write("**Chatbot:**", response.text)
+                if GEMINI_AVAILABLE:
+                    with st.spinner("Pensando..."):
+                        response = chatbot.send_message(chat_input)
+                        st.write("**Chatbot:**", response.text)
+                else:
+                    with st.spinner("Pensando..."):
+                        response = chatbot_response(chat_input)
+                        st.write("**Chatbot:**", response)
             else:
                 st.warning("Por favor, escribe una pregunta primero.")
 
