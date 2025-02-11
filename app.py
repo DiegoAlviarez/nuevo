@@ -7,9 +7,9 @@ import random
 import time
 import os
 import base64
-import zipfile
 from cryptography.fernet import Fernet
-from pathlib import Path
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from datetime import datetime
 import plotly.express as px
 import pandas as pd
@@ -30,7 +30,7 @@ if 'chat_history' not in st.session_state:
 if 'vault_key' not in st.session_state:
     st.session_state.vault_key = None
 
-# Configuración de la página
+# Configuración de la página con fondo personalizado
 st.set_page_config(
     page_title="WildPass Pro",
     page_icon="🔒",
@@ -38,18 +38,34 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos del chat
-st.markdown("""
+# Estilos CSS con imagen de fondo
+st.markdown(f"""
 <style>
-.chat-container {
+.stApp {{
+    background-image: url("https://media.istockphoto.com/id/1224500457/es/vector/patr%C3%B3n-sin-fisuras-de-l%C3%ADneas-de-tecnolog%C3%ADa-abstracta.jpg?s=612x612&w=0&k=20&c=5A3m7nH7jKvLh5O0-4y-4p7X4Y8l0w0J3Q8W7J3Q3Y=");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}}
+
+.main {{
+    background-color: rgba(255, 255, 255, 0.9);
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.2);
+}}
+
+.chat-container {{
     max-height: 500px;
     overflow-y: auto;
     padding: 20px;
-    background: #f5f5f5;
-    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 15px;
     margin-bottom: 20px;
-}
-.user-message {
+}}
+
+.user-message {{
     background: #DCF8C6;
     padding: 10px;
     border-radius: 15px;
@@ -57,8 +73,9 @@ st.markdown("""
     max-width: 70%;
     float: right;
     clear: both;
-}
-.bot-message {
+}}
+
+.bot-message {{
     background: white;
     padding: 10px;
     border-radius: 15px;
@@ -66,35 +83,60 @@ st.markdown("""
     max-width: 70%;
     float: left;
     clear: both;
-}
-.timestamp {
+}}
+
+.timestamp {{
     font-size: 0.7em;
     color: #666;
     margin-top: 3px;
-}
+}}
+
+.sidebar .sidebar-content {{
+    background-color: rgba(255, 255, 255, 0.9) !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
 class SecureVault:
     @staticmethod
-    def generate_key():
-        return Fernet.generate_key().decode()
-    
+    def generate_key(password: str) -> bytes:
+        salt = b'secure_salt_123'
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+
     @staticmethod
-    def encrypt_file(file_path, key):
-        fernet = Fernet(key.encode())
+    def encrypt_file(file_path: str, password: str):
+        key = SecureVault.generate_key(password)
+        fernet = Fernet(key)
+        
         with open(file_path, "rb") as file:
-            encrypted = fernet.encrypt(file.read())
+            original = file.read()
+        
+        encrypted = fernet.encrypt(original)
+        
         with open(file_path, "wb") as file:
             file.write(encrypted)
-    
+
     @staticmethod
-    def decrypt_file(file_path, key):
-        fernet = Fernet(key.encode())
+    def decrypt_file(file_path: str, password: str):
+        key = SecureVault.generate_key(password)
+        fernet = Fernet(key)
+        
         with open(file_path, "rb") as file:
-            decrypted = fernet.decrypt(file.read())
-        with open(file_path, "wb") as file:
-            file.write(decrypted)
+            encrypted = file.read()
+        
+        try:
+            decrypted = fernet.decrypt(encrypted)
+            with open(file_path, "wb") as file:
+                file.write(decrypted)
+            return True
+        except:
+            return False
 
 class PasswordModel:
     def __init__(self):
@@ -191,7 +233,6 @@ class PasswordModel:
                 self.training_history.append(acc)
                 fi = self.model.feature_importances_ if hasattr(self.model, 'feature_importances_') else [0.35, 0.25, 0.20, 0.15, 0.05]
                 
-                # Actualizar gráfica de precisión
                 df = pd.DataFrame({'Época': range(1, epoch+1), 'Precisión': self.training_history})
                 fig = px.line(df, x='Época', y='Precisión', title='Progreso del Entrenamiento')
                 chart_placeholder.plotly_chart(fig)
@@ -203,7 +244,6 @@ class PasswordModel:
 
             joblib.dump(self.model, "local_pass_model.pkl")
             
-            # Gráfica final de importancia de características
             features = ['Longitud', 'Mayúsculas', 'Dígitos', 'Símbolos', 'Unicidad']
             fig = px.bar(x=features, y=fi, title='Importancia de las Características')
             st.plotly_chart(fig)
@@ -221,40 +261,49 @@ def secure_folder_section():
     
     with col1:
         st.markdown("### Subir Archivos")
-        uploaded_file = st.file_uploader("Selecciona archivo a proteger:", type=["txt", "pdf", "png", "jpg", "docx", "xlsx"])
-        access_key = st.text_input("Llave de acceso:", type="password")
+        uploaded_file = st.file_uploader("Selecciona archivo a proteger:", 
+                                       type=["txt", "pdf", "png", "jpg", "docx", "xlsx"])
+        access_key = st.text_input("Crea una llave de acceso:", type="password")
         
         if uploaded_file and access_key:
-            file_path = os.path.join(SECURE_FOLDER, uploaded_file.name)
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            SecureVault.encrypt_file(file_path, access_key)
-            st.success("Archivo protegido con éxito!")
+            if len(access_key) < 8:
+                st.error("La llave debe tener al menos 8 caracteres")
+            else:
+                file_path = os.path.join(SECURE_FOLDER, uploaded_file.name)
+                with open(file_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                SecureVault.encrypt_file(file_path, access_key)
+                st.success("Archivo protegido con éxito!")
+                st.info("Guarda bien tu llave de acceso, sin ella no podrás recuperar el archivo")
     
     with col2:
         st.markdown("### Acceder a Archivos")
-        access_key_download = st.text_input("Llave de acceso para descargar:", type="password")
+        access_key_download = st.text_input("Ingresa tu llave de acceso:", type="password")
         
         if access_key_download:
-            try:
-                files = [f for f in os.listdir(SECURE_FOLDER) if os.path.isfile(os.path.join(SECURE_FOLDER, f))]
+            files = [f for f in os.listdir(SECURE_FOLDER) 
+                    if os.path.isfile(os.path.join(SECURE_FOLDER, f))]
+            
+            if files:
                 selected_file = st.selectbox("Archivos disponibles:", files)
                 
                 if selected_file:
                     file_path = os.path.join(SECURE_FOLDER, selected_file)
                     temp_path = f"temp_{selected_file}"
                     
-                    SecureVault.decrypt_file(file_path, access_key_download)
-                    with open(file_path, "rb") as f:
-                        st.download_button(
-                            label="Descargar archivo",
-                            data=f,
-                            file_name=selected_file,
-                            mime="application/octet-stream"
-                        )
-                    SecureVault.encrypt_file(file_path, access_key_download)
-            except:
-                st.error("Llave de acceso incorrecta!")
+                    if SecureVault.decrypt_file(file_path, access_key_download):
+                        with open(file_path, "rb") as f:
+                            st.download_button(
+                                label="Descargar archivo",
+                                data=f,
+                                file_name=selected_file,
+                                mime="application/octet-stream"
+                            )
+                        SecureVault.encrypt_file(file_path, access_key_download)
+                    else:
+                        st.error("Llave de acceso incorrecta o archivo corrupto")
+            else:
+                st.info("No hay archivos protegidos disponibles")
 
 def chat_interface():
     st.subheader("💬 Chat de Seguridad")
@@ -290,7 +339,6 @@ def chat_interface():
                     'time': datetime.now().strftime("%H:%M")
                 })
                 
-                # Respuestas del bot
                 respuestas = {
                     'hola': '¡Hola! Soy WildBot 🤖 ¿En qué puedo ayudarte?',
                     'ayuda': 'Puedo:\n🔸 Generar contraseñas seguras\n🔸 Analizar tu contraseña\n🔸 Entrenar el modelo IA\n🔸 Dar consejos de seguridad',
@@ -312,6 +360,7 @@ def chat_interface():
                 st.experimental_rerun()
 
 def main():
+    st.markdown('<div class="main">', unsafe_allow_html=True)
     st.title("🔐 WildPass Pro - Gestor de Contraseñas")
     st.markdown("---")
     
@@ -345,7 +394,6 @@ def main():
                 st.code(password, language="text")
                 st.session_state.generated_passwords.append(password)
         
-        # Descargar contraseñas
         if st.session_state.generated_passwords:
             pass_str = "\n".join(st.session_state.generated_passwords)
             st.download_button(
@@ -355,7 +403,6 @@ def main():
                 mime="text/plain"
             )
         
-        # Gráfica de distribución de contraseñas generadas
         try:
             sample_passwords = [model.generate_strong_password() for _ in range(50)]
             strengths = [model.model.predict_proba([model.extract_features(pwd)])[0][1] for pwd in sample_passwords]
@@ -379,7 +426,6 @@ def main():
                     st.metric("Puntuación de Seguridad", f"{score:.1f}%")
                     st.progress(score/100)
                     
-                    # Gráfica de características
                     df = pd.DataFrame({
                         'Característica': ['Longitud', 'Mayúsculas', 'Dígitos', 'Símbolos', 'Unicidad'],
                         'Valor': features
@@ -402,6 +448,7 @@ def main():
     
     elif menu == "🗃️ Carpeta Segura":
         secure_folder_section()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main
