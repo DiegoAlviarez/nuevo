@@ -1,175 +1,121 @@
 import streamlit as st
-from streamlit_lottie import st_lottie
-from data_loader import load_data
-from utils import load_lottieurl, convertir_urls_a_imagenes, generar_valores_mensuales
-from visualizations import (
-    plot_evolucion_individual,
-    plot_comparacion_jugadores,
-    plot_tendencias_generales,
-    plot_distribucion_valores
-)
-from components.league_comparison import show_league_comparison
-from components.league_evolution import plot_league_evolution_comparison, plot_league_comparison_stats
+import joblib
+import numpy as np
+import string
+import random
+import time
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from google.generativeai import configure, generate_content
 
-# Configuración inicial de la página
-st.set_page_config(
-    page_title="Análisis Futbolístico",
-    page_icon="⚽",
-    layout="wide"
-)
+configure(api_key="TU_API_KEY_GEMINI")
 
-# Cargar datos
-data, data_bundesliga = load_data()
+class PasswordModel:
+    def __init__(self):
+        self.model = None
+        self.load_model()
 
-# Sidebar con menú principal
-st.sidebar.title("Menú Principal")
-menu_principal = st.sidebar.radio(
-    "Seleccione una sección:",
-    ["Introducción", "Objetivos", "Metodología", "Herramientas", "Resultados", "Conclusiones"]
-)
+    def load_model(self):
+        try:
+            self.model = joblib.load("local_pass_model.pkl")
+            st.success("Modelo de seguridad cargado!")
+        except Exception:
+            st.warning("Modelo no encontrado, por favor entrénalo primero")
+            self.model = None
 
-if menu_principal == "Introducción":
-    st.title("Introducción")
-    st.write("""
-    La industria del fútbol ha evolucionado significativamente, convirtiéndose en un mercado 
-    donde el valor de los jugadores es un indicador crucial de su desempeño y potencial.
-    """)
-    
-    # Mostrar comparativa de ligas
-    show_league_comparison(data, data_bundesliga)
-    
-    lottie_url = "https://lottie.host/embed/3d48d4b9-51ad-4b7d-9d28-5e248cace11/Rz3QtSCq3.json"
-    lottie_coding = load_lottieurl(lottie_url)
-    if lottie_coding:
-        st_lottie(lottie_coding, height=200, width=300)
+    def generate_weak_password(self):
+        patterns = [
+            lambda: ''.join(random.choice(string.ascii_lowercase) for _ in range(8)),
+            lambda: ''.join(random.choice(["123456", "password", "qwerty", "admin"])),
+            lambda: ''.join(random.choice(string.digits) for _ in range(6))
+        ]
+        return random.choice(patterns)()
 
-elif menu_principal == "Metodología":
-    st.title("Metodología")
-    
-    visualizacion = st.selectbox(
-        "Seleccione tipo de visualización:",
-        ["Evolución Individual", "Comparación entre Jugadores", "Tendencias Generales", "Comparativa entre Ligas"]
+    def generate_strong_password(self):
+        chars = string.ascii_letters + string.digits + string.punctuation
+        return ''.join(random.SystemRandom().choice(chars) for _ in range(16))
+
+    def extract_features(self, password):
+        return [
+            len(password),
+            sum(c.isupper() for c in password),
+            sum(c.isdigit() for c in password),
+            sum(c in string.punctuation for c in password),
+            len(set(password)) / max(len(password), 1)
+        ]
+
+def animated_message(message):
+    with st.empty():
+        for _ in range(3):
+            st.write(f"{message}.")
+            time.sleep(0.3)
+            st.write(f"{message}..")
+            time.sleep(0.3)
+            st.write(f"{message}...")
+            time.sleep(0.3)
+
+def chat_with_gemini(prompt):
+    response = generate_content(prompt)
+    return response.text if response else "No se pudo obtener respuesta."
+
+def main():
+    st.set_page_config(
+        page_title="WildPass Local",
+        page_icon="🔒",
+        layout="centered",
+        initial_sidebar_state="expanded"
     )
     
-    col_inicial = "Valor de Mercado en 01/01/2024"
-    col_final = "Valor de Mercado Actual"
+    st.title("🔐 WildPass Local - Generador Seguro")
+    st.markdown("---")
     
-    if visualizacion == "Evolución Individual":
-        liga_seleccionada = st.selectbox(
-            "Seleccione la liga a analizar:",
-            ["LaLiga", "Bundesliga"]
-        )
-        datos_analizar = data if liga_seleccionada == "LaLiga" else data_bundesliga
-        st.subheader(f"Evolución Individual del Valor de Mercado - {liga_seleccionada}")
-        nombre_jugador = st.selectbox("Selecciona un jugador:", datos_analizar['Nombre'].unique())
-        plot_evolucion_individual(datos_analizar, nombre_jugador, col_inicial, col_final)
+    model = PasswordModel()
     
-    elif visualizacion == "Comparación entre Jugadores":
-        st.subheader("Comparación entre Jugadores")
-        liga_seleccionada = st.selectbox(
-            "Seleccione la liga a analizar:",
-            ["LaLiga", "Bundesliga"]
-        )
-        datos_analizar = data if liga_seleccionada == "LaLiga" else data_bundesliga
+    menu = st.sidebar.selectbox(
+        "Menú Principal",
+        ["🏠 Inicio", "📊 Analizar Contraseña", "💬 Chat de Seguridad"]
+    )
+    
+    if menu == "🏠 Inicio":
+        st.subheader("Generar Contraseñas")
         col1, col2 = st.columns(2)
+        
         with col1:
-            jugador1 = st.selectbox("Primer jugador:", datos_analizar['Nombre'].unique())
+            if st.button("🔒 Generar Contraseña Fuerte"):
+                animated_message("Generando contraseña fuerte")
+                password = model.generate_strong_password()
+                st.code(password, language="text")
+                
         with col2:
-            jugador2 = st.selectbox("Segundo jugador:", datos_analizar['Nombre'].unique())
-        plot_comparacion_jugadores(datos_analizar, jugador1, jugador2, col_inicial, col_final)
-    
-    elif visualizacion == "Tendencias Generales":
-        liga_seleccionada = st.selectbox(
-            "Seleccione la liga a analizar:",
-            ["LaLiga", "Bundesliga"]
-        )
-        datos_analizar = data if liga_seleccionada == "LaLiga" else data_bundesliga
-        st.subheader("Tendencias Generales del Mercado")
-        plot_tendencias_generales(datos_analizar, col_inicial, col_final)
-    
-    elif visualizacion == "Comparativa entre Ligas":
-        st.subheader("Análisis Comparativo entre LaLiga y Bundesliga")
-        plot_league_evolution_comparison(data, data_bundesliga, col_inicial, col_final)
-        plot_league_comparison_stats(data, data_bundesliga)
-
-# ... (rest of the sections remain the same)
-
-elif menu_principal == "Objetivos":
-    st.title("Objetivos del Proyecto")
-    st.write("""
-    ### Objetivos Principales:
-    - Analizar y visualizar el valor de mercado de los jugadores
-    - Evaluar el incremento porcentual del valor de mercado a lo largo del tiempo
-    - Identificar patrones y tendencias en la valoración de jugadores
-    """)
-
-elif menu_principal == "Herramientas":
-    st.title("Herramientas y Tecnologías")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.header("Tecnologías Principales")
-        st.write("""
-        - Python
-        - Pandas
-        - Streamlit
-        - Plotly
-        - Google Colab
-        - Jupiter Notebook
-        """)
-    
-    with col2:
-        st.header("Bibliotecas Adicionales")
-        st.write("""
-        - Matplotlib
-        - Seaborn
-        - Streamlit-Lottie
-        """)
-
-elif menu_principal == "Resultados":
-    st.title("Resultados")
-    
-    liga_seleccionada = st.selectbox(
-        "Seleccione la liga a analizar:",
-        ["LaLiga", "Bundesliga", "Comparativa"]
-    )
-    
-    if liga_seleccionada == "Comparativa":
-        show_league_comparison(data, data_bundesliga)
-    else:
-        datos_analizar = data if liga_seleccionada == "LaLiga" else data_bundesliga
-        col_inicial = "Valor de Mercado en 01/01/2024"
-        col_final = "Valor de Mercado Actual"
+            if st.button("⚠ Generar Contraseña Débil"):
+                animated_message("Generando contraseña débil")
+                password = model.generate_weak_password()
+                st.code(password, language="text")
+                
+    elif menu == "📊 Analizar Contraseña":
+        st.subheader("Analizador de Seguridad")
+        password = st.text_input("Introduce una contraseña para analizar:", type="password")
         
-        tab1, tab2, tab3 = st.tabs(["Estadísticas Generales", "Análisis de Tendencias", "Recomendaciones"])
-        
-        with tab1:
-            st.header("Estadísticas Generales")
-            st.write("Estadísticas descriptivas de los valores de mercado:")
-            st.dataframe(datos_analizar[[col_inicial, col_final]].describe())
-            
-        with tab2:
-            st.header("Análisis de Tendencias")
-            plot_distribucion_valores(datos_analizar, col_inicial, col_final)
-            
-        with tab3:
-            st.header("Recomendaciones")
-            st.write("""
-            Basadas en el análisis de datos:
-            - Recomendaciones para clubes
-            - Estrategias de inversión
-            - Oportunidades de mercado
-            """)
+        if password:
+            animated_message("Analizando contraseña")
+            if model.model is None:
+                st.error("Primero entrena el modelo!")
+            else:
+                try:
+                    score = model.model.predict_proba([model.extract_features(password)])[0][1] * 100
+                    st.metric("Puntuación de Seguridad", f"{score:.1f}%")
+                except Exception as e:
+                    st.error(f"Error en análisis: {str(e)}")
 
-else:  # Conclusiones
-    st.title("Conclusiones")
-    st.write("""
-    ### Principales Hallazgos:
-    - El análisis de datos en el fútbol ofrece insights valiosos para la toma de decisiones
-    - Las tendencias del mercado muestran patrones significativos en la valoración de jugadores
-    - La gestión basada en datos puede mejorar significativamente las estrategias de los equipos
-    """)
+    elif menu == "💬 Chat de Seguridad":
+        st.subheader("Asistente de Seguridad - Gemini AI")
+        user_input = st.text_area("Escribe tu duda sobre seguridad de contraseñas:")
+        if st.button("Preguntar"):
+            if user_input:
+                response = chat_with_gemini(user_input)
+                st.write(response)
+            else:
+                st.warning("Por favor, escribe una pregunta.")
 
-# Footer
-st.sidebar.markdown("---")
-st.sidebar.info("ANÁLISIS DE LAS ESTADÍSTICAS QUE TIENEN MAYOR CORRELACIÓN CON EL VALOR DE MERCADO DE LOS JUGADORES DE FUTBOL EN ESPAÑA")
+if __name__ == "__main__":
+    main()
