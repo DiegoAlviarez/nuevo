@@ -1,37 +1,58 @@
+# app.py
 import streamlit as st
 import joblib
 import numpy as np
 import string
 import random
 import time
-import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from datetime import datetime
 
-# Intentamos importar Gemini 2.0 (si falla, se manejará el error)
-try:
-    from google.generativeai import configure, Chat
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-    st.warning("Google Gemini 2.0 no está disponible. Usaremos OpenAI como alternativa.")
+# Configuración de la página
+st.set_page_config(
+    page_title="WildPass Pro",
+    page_icon="🔒",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
 
-# Configuración de la API de Gemini (si disponible)
-if GEMINI_AVAILABLE:
-    GEMINI_API_KEY = "AIzaSyDYz170jq43MyNw8W14GPYb25ZdcNafSnE"
-    configure(api_key=GEMINI_API_KEY)
-    chatbot = Chat()
-else:
-    import openai
-    openai.api_key = "your_openai_api_key"
-    
-    def chatbot_response(message):
-        response = openai.Completion.create(
-            engine="gpt-3.5-turbo",
-            prompt=message,
-            max_tokens=150
-        )
-        return response.choices[0].text.strip()
+# Estilos del chat
+st.markdown("""
+<style>
+.chat-container {
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 20px;
+    background: #f5f5f5;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+.user-message {
+    background: #DCF8C6;
+    padding: 10px;
+    border-radius: 15px;
+    margin: 5px 0;
+    max-width: 70%;
+    float: right;
+    clear: both;
+}
+.bot-message {
+    background: white;
+    padding: 10px;
+    border-radius: 15px;
+    margin: 5px 0;
+    max-width: 70%;
+    float: left;
+    clear: both;
+}
+.timestamp {
+    font-size: 0.7em;
+    color: #666;
+    margin-top: 3px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 class PasswordModel:
     def __init__(self):
@@ -41,9 +62,9 @@ class PasswordModel:
     def load_model(self):
         try:
             self.model = joblib.load("local_pass_model.pkl")
-            st.success("Modelo de seguridad cargado!")
+            st.success("✅ Modelo de seguridad cargado!")
         except Exception:
-            st.warning("Modelo no encontrado, por favor entrénalo primero")
+            st.warning("⚠ Modelo no encontrado, entrénalo primero")
             self.model = None
 
     def generate_weak_password(self):
@@ -58,126 +79,193 @@ class PasswordModel:
         chars = string.ascii_letters + string.digits + string.punctuation
         return ''.join(random.SystemRandom().choice(chars) for _ in range(16))
 
+    def generate_training_data(self, samples=1000):
+        X = []
+        y = []
+        for _ in range(samples//2):
+            X.append(self.extract_features(self.generate_weak_password()))
+            y.append(0)
+            X.append(self.extract_features(self.generate_strong_password()))
+            y.append(1)
+        return np.array(X), np.array(y)
+
     def extract_features(self, password):
         return [
             len(password),
             sum(c.isupper() for c in password),
             sum(c.isdigit() for c in password),
             sum(c in string.punctuation for c in password),
-            len(set(password)) / max(len(password), 1)
+            len(set(password))/max(len(password), 1)
         ]
 
-def main():
-    st.set_page_config(
-        page_title="WildPass Local",
-        page_icon="🔒",
-        layout="centered",
-        initial_sidebar_state="expanded"
-    )
+    def train_model(self):
+        try:
+            X, y = self.generate_training_data()
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+            self.model = RandomForestClassifier(n_estimators=100)
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            training_panel = st.empty()
+
+            def create_training_panel(epoch, accuracy, feature_importances):
+                feature_bars = "\n".join([
+                    f"Longitud   {'▮' * int(fi[0]*40)} {fi[0]*100:.1f}%",
+                    f"Mayúsculas {'▮' * int(fi[1]*40)} {fi[1]*100:.1f}%",
+                    f"Dígitos    {'▮' * int(fi[2]*40)} {fi[2]*100:.1f}%",
+                    f"Símbolos   {'▮' * int(fi[3]*40)} {fi[3]*100:.1f}%",
+                    f"Unicidad   {'▮' * int(fi[4]*40)} {fi[4]*100:.1f}%"
+                ])
+                
+                panel = f"""
+                ╭────────────────── WildPassPro - Entrenamiento de IA ──────────────────╮
+                │                                                                        │
+                │ Progreso del Entrenamiento:                                            │
+                │ Árboles creados: {epoch}/100                                           │
+                │ Precisión actual: {accuracy:.1%}                                      │
+                │                                                                        │
+                │ Características más importantes:                                       │
+                {feature_bars}
+                │                                                                        │
+                │ Creando protección inteligente...                                      │
+                ╰────────────────────────────────────────────────────────────────────────╯
+                """
+                return panel
+
+            for epoch in range(1, 101):
+                self.model.fit(X_train, y_train)
+                acc = self.model.score(X_test, y_test)
+                fi = self.model.feature_importances_ if hasattr(self.model, 'feature_importances_') else [0.35, 0.25, 0.20, 0.15, 0.05]
+                
+                progress_bar.progress(epoch/100)
+                status_text.text(f"Época: {epoch} - Precisión: {acc:.2%}")
+                training_panel.code(create_training_panel(epoch, acc, fi))
+                time.sleep(0.05)
+
+            joblib.dump(self.model, "local_pass_model.pkl")
+            st.success(f"🎉 Modelo entrenado! Precisión: {acc:.2%}")
+            return True
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
+            return False
+
+def chat_interface():
+    st.subheader("💬 Chat de Seguridad")
     
-    st.title("🔐 WildPass Local - Generador Seguro")
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+    
+    with st.container():
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+        
+        for msg in st.session_state.chat_history:
+            if msg['type'] == 'user':
+                st.markdown(f'''
+                <div class="user-message">
+                    {msg["content"]}
+                    <div class="timestamp">{msg["time"]}</div>
+                </div>
+                ''', unsafe_allow_html=True)
+            else:
+                st.markdown(f'''
+                <div class="bot-message">
+                    {msg["content"]}
+                    <div class="timestamp">{msg["time"]}</div>
+                </div>
+                ''', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        user_input = st.text_input("Escribe tu mensaje:", key="chat_input")
+        
+        if st.button("Enviar") or user_input:
+            if user_input:
+                st.session_state.chat_history.append({
+                    'type': 'user',
+                    'content': user_input,
+                    'time': datetime.now().strftime("%H:%M")
+                })
+                
+                # Respuestas del bot
+                respuestas = {
+                    'hola': '¡Hola! Soy WildBot 🤖 ¿En qué puedo ayudarte?',
+                    'ayuda': 'Puedo:\n🔸 Generar contraseñas seguras\n🔸 Analizar tu contraseña\n🔸 Entrenar el modelo IA\n🔸 Dar consejos de seguridad',
+                    'seguridad': '🔒 Consejos de seguridad:\n1. 12+ caracteres\n2. Mayúsculas y minúsculas\n3. Números y símbolos\n4. Sin información personal',
+                    'generar': 'Para generar:\n1. Ve a "🏠 Inicio"\n2. Click en "🔒 Generar"\n3. ¡Listo! 🎉',
+                    'default': '🤖 No entendí. ¿Puedes reformularlo?'
+                }
+                
+                respuesta = next((v for k, v in respuestas.items() if k in user_input.lower()), respuestas['default'])
+                
+                st.session_state.chat_history.append({
+                    'type': 'bot',
+                    'content': respuesta,
+                    'time': datetime.now().strftime("%H:%M")
+                })
+                
+                st.session_state.chat_input = ""
+                st.experimental_rerun()
+
+def main():
+    st.title("🔐 WildPass Pro - Gestor de Contraseñas")
     st.markdown("---")
     
     model = PasswordModel()
     
-    menu = st.sidebar.selectbox(
+    menu = st.sidebar.radio(
         "Menú Principal",
-        ["🏠 Inicio", "🔧 Entrenar Modelo", "📊 Analizar Contraseña", "💬 Chatbot de Seguridad"]
+        ["🏠 Inicio", "📊 Analizar", "🔧 Entrenar IA", "💬 Chat"]
     )
     
-    if menu == "🔧 Entrenar Modelo":
-        st.subheader("Entrenamiento del Modelo IA")
-        st.write("El modelo se entrena con muestras de contraseñas débiles y fuertes para mejorar su precisión en la clasificación.")
-        if st.button("🚀 Iniciar Entrenamiento"):
-            try:
-                X, y = model.generate_training_data()
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-
-                model.model = RandomForestClassifier(n_estimators=100)
-                
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                training_panel = st.empty()
-
-                acc_history = []
-
-                def create_training_panel(epoch, accuracy, feature_importances):
-                    feature_bars = "\n".join([
-                        f"Longitud   {'▮' * int(fi * 40)} {fi * 100:.1f}%" for fi in feature_importances
-                    ])
-                    
-                    panel = f"""
-                    ╭────────────────── WildPassPro - Entrenamiento de IA ──────────────────╮
-                    │                                                                        │
-                    │ Progreso del Entrenamiento:                                            │
-                    │ Árboles creados: {epoch}/100                                           │
-                    │ Precisión actual: {accuracy:.1%}                                      │
-                    │                                                                        │
-                    │ Características más importantes:                                       │
-                    {feature_bars}
-                    │                                                                        │
-                    │ Creando protección inteligente...                                      │
-                    ╰────────────────────────────────────────────────────────────────────────╯
-                    """
-                    return panel
-
-                for epoch in range(1, 101):
-                    model.model.fit(X_train, y_train)
-                    acc = model.model.score(X_test, y_test)
-                    acc_history.append(acc)
-                    fi = getattr(model.model, 'feature_importances_', [0.35, 0.25, 0.20, 0.15, 0.05])
-                    
-                    progress_bar.progress(epoch / 100)
-                    status_text.text(f"Época: {epoch} - Precisión: {acc:.2%}")
-                    training_panel.code(create_training_panel(epoch, acc, fi))
-                    
-                    time.sleep(0.1)
-                
-                joblib.dump(model.model, "local_pass_model.pkl")
-                st.success(f"Modelo entrenado! Precisión: {acc:.2%}")
-                st.balloons()
-
-                st.subheader("📊 Evolución de la Precisión")
-                plt.plot(range(1, 101), acc_history, marker='o')
-                plt.xlabel("Épocas")
-                plt.ylabel("Precisión")
-                plt.title("Precisión del Modelo a lo Largo del Entrenamiento")
-                st.pyplot(plt)
-            except Exception as e:
-                st.error(f"Error en entrenamiento: {str(e)}")
+    if menu == "🏠 Inicio":
+        st.subheader("Generador de Contraseñas")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔒 Generar Fuerte"):
+                password = model.generate_strong_password()
+                st.code(password, language="text")
+        
+        with col2:
+            if st.button("⚠ Generar Débil"):
+                password = model.generate_weak_password()
+                st.code(password, language="text")
     
-    elif menu == "📊 Analizar Contraseña":
+    elif menu == "📊 Analizar":
         st.subheader("Analizador de Seguridad")
-        st.write("Este módulo evalúa la seguridad de una contraseña dada en base a un modelo de IA.")
-        password = st.text_input("Introduce una contraseña para analizar:", type="password")
+        password = st.text_input("Introduce una contraseña:", type="password")
         
         if password:
             if model.model is None:
                 st.error("Primero entrena el modelo!")
             else:
                 try:
-                    score = model.model.predict_proba([model.extract_features(password)])[0][1] * 100
+                    features = model.extract_features(password)
+                    score = model.model.predict_proba([features])[0][1] * 100
+                    
                     st.metric("Puntuación de Seguridad", f"{score:.1f}%")
+                    st.progress(score/100)
+                    
+                    st.json({
+                        "Longitud": features[0],
+                        "Mayúsculas": features[1],
+                        "Dígitos": features[2],
+                        "Símbolos": features[3],
+                        "Unicidad": f"{features[4]*100:.1f}%"
+                    })
                 except Exception as e:
-                    st.error(f"Error en análisis: {str(e)}")
+                    st.error(f"Error: {str(e)}")
     
-    elif menu == "💬 Chatbot de Seguridad":
-        st.subheader("💬 Chatbot de Seguridad - WildPass AI")
-        st.write("Habla con el chatbot sobre la seguridad de tus contraseñas.")
-        chat_input = st.text_input("Escribe tu pregunta sobre seguridad de contraseñas:")
-        
-        if st.button("Enviar"):
-            if chat_input:
-                if GEMINI_AVAILABLE:
-                    with st.spinner("Pensando..."):
-                        response = chatbot.send_message(chat_input)
-                        st.write("**Chatbot:**", response.text)
-                else:
-                    with st.spinner("Pensando..."):
-                        response = chatbot_response(chat_input)
-                        st.write("**Chatbot:**", response)
-            else:
-                st.warning("Por favor, escribe una pregunta primero.")
+    elif menu == "🔧 Entrenar IA":
+        st.subheader("Entrenamiento del Modelo")
+        if st.button("🚀 Iniciar Entrenamiento"):
+            with st.spinner("Entrenando IA..."):
+                if model.train_model():
+                    st.balloons()
+    
+    elif menu == "💬 Chat":
+        chat_interface()
 
 if __name__ == "__main__":
     main()
