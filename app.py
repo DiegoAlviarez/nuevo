@@ -6,9 +6,35 @@ import random
 import time
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from google.generativeai import configure, generate_content
+from google.generativeai import configure, ChatModel
 
 configure(api_key="AIzaSyDYz170jq43MyNw8W14GPYb25ZdcNafSnE")
+chatbot = ChatModel("gemini-2.0")
+
+st.set_page_config(
+    page_title="WildPass Local",
+    page_icon="🔒",
+    layout="wide",
+    initial_sidebar_state="expanded")
+
+st.markdown("""
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+        }
+        .stButton>button {
+            border-radius: 12px;
+            background: linear-gradient(135deg, #ff7eb3, #ff758c);
+            color: white;
+        }
+        .stTextInput>div>div>input {
+            border-radius: 10px;
+            background: #222;
+            color: white;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 class PasswordModel:
     def __init__(self):
@@ -54,26 +80,42 @@ def animated_message(message):
             st.write(f"{message}...")
             time.sleep(0.3)
 
-def chat_with_gemini(prompt):
-    response = generate_content(prompt)
-    return response.text if response else "No se pudo obtener respuesta."
+def create_training_panel(epoch, accuracy, feature_importances):
+    feature_bars = "\n".join([
+        f"Longitud   {'▮' * int(feature_importances[0]*40)} {feature_importances[0]*100:.1f}%",
+        f"Mayúsculas {'▮' * int(feature_importances[1]*40)} {feature_importances[1]*100:.1f}%",
+        f"Dígitos    {'▮' * int(feature_importances[2]*40)} {feature_importances[2]*100:.1f}%",
+        f"Símbolos   {'▮' * int(feature_importances[3]*40)} {feature_importances[3]*100:.1f}%",
+        f"Unicidad   {'▮' * int(feature_importances[4]*40)} {feature_importances[4]*100:.1f}%"
+    ])
+
+    panel = f"""
+    ╭────────────────── WildPassPro - Entrenamiento de IA ──────────────────╮
+    │                                                                        │
+    │ Progreso del Entrenamiento:                                            │
+    │ Árboles creados: {epoch}/100                                           │
+    │ Precisión actual: {accuracy:.1%}                                      │
+    │                                                                        │
+    │ Características más importantes:                                       │
+    {feature_bars}
+    │                                                                        │
+    │ Creando protección inteligente...                                      │
+    ╰────────────────────────────────────────────────────────────────────────╯
+    """
+    return panel
+
+def chat_with_gemini(user_input):
+    response = chatbot.chat(user_input)
+    return response.text
 
 def main():
-    st.set_page_config(
-        page_title="WildPass Local",
-        page_icon="🔒",
-        layout="centered",
-        initial_sidebar_state="expanded"
-    )
-    
     st.title("🔐 WildPass Local - Generador Seguro")
     st.markdown("---")
-    
     model = PasswordModel()
     
     menu = st.sidebar.selectbox(
         "Menú Principal",
-        ["🏠 Inicio", "📊 Analizar Contraseña", "💬 Chat de Seguridad"]
+        ["🏠 Inicio", "📊 Analizar Contraseña", "💬 Chatbot de Seguridad"]
     )
     
     if menu == "🏠 Inicio":
@@ -85,13 +127,15 @@ def main():
                 animated_message("Generando contraseña fuerte")
                 password = model.generate_strong_password()
                 st.code(password, language="text")
+                st.balloons()
                 
         with col2:
             if st.button("⚠ Generar Contraseña Débil"):
                 animated_message("Generando contraseña débil")
                 password = model.generate_weak_password()
                 st.code(password, language="text")
-                
+                st.warning("Esta contraseña es débil. Considera generar una más fuerte.")
+    
     elif menu == "📊 Analizar Contraseña":
         st.subheader("Analizador de Seguridad")
         password = st.text_input("Introduce una contraseña para analizar:", type="password")
@@ -104,18 +148,20 @@ def main():
                 try:
                     score = model.model.predict_proba([model.extract_features(password)])[0][1] * 100
                     st.metric("Puntuación de Seguridad", f"{score:.1f}%")
+                    if score > 80:
+                        st.success("¡Buena elección! Tu contraseña es segura.")
+                    else:
+                        st.warning("Tu contraseña podría ser vulnerable. Intenta mejorarla.")
                 except Exception as e:
                     st.error(f"Error en análisis: {str(e)}")
-
-    elif menu == "💬 Chat de Seguridad":
-        st.subheader("Asistente de Seguridad - Gemini AI")
-        user_input = st.text_area("Escribe tu duda sobre seguridad de contraseñas:")
-        if st.button("Preguntar"):
-            if user_input:
-                response = chat_with_gemini(user_input)
-                st.write(response)
-            else:
-                st.warning("Por favor, escribe una pregunta.")
+    
+    elif menu == "💬 Chatbot de Seguridad":
+        st.subheader("Chatbot de Seguridad")
+        user_input = st.text_input("Pregúntame sobre seguridad de contraseñas")
+        if user_input:
+            animated_message("Procesando respuesta")
+            response = chat_with_gemini(user_input)
+            st.write(response)
 
 if __name__ == "__main__":
     main()
