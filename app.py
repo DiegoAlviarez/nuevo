@@ -20,6 +20,16 @@ from sklearn.model_selection import train_test_split
 SECURE_FOLDER = "secure_vault"
 os.makedirs(SECURE_FOLDER, exist_ok=True)
 
+# Inicialización del estado de la sesión
+if 'generated_passwords' not in st.session_state:
+    st.session_state.generated_passwords = []
+
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
+
+if 'vault_key' not in st.session_state:
+    st.session_state.vault_key = None
+
 # Configuración de la página
 st.set_page_config(
     page_title="WildPass Pro",
@@ -91,8 +101,6 @@ class PasswordModel:
         self.model = None
         self.load_model()
         self.training_history = []
-        if 'generated_passwords' not in st.session_state:
-            st.session_state.generated_passwords = []
 
     def load_model(self):
         try:
@@ -209,9 +217,6 @@ class PasswordModel:
 def secure_folder_section():
     st.subheader("🔐 Carpeta Segura")
     
-    if 'vault_key' not in st.session_state:
-        st.session_state.vault_key = None
-    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -253,9 +258,6 @@ def secure_folder_section():
 
 def chat_interface():
     st.subheader("💬 Chat de Seguridad")
-    
-    if 'chat_history' not in st.session_state:
-        st.session_state.chat_history = []
     
     with st.container():
         st.markdown('<div class="chat-container">', unsafe_allow_html=True)
